@@ -1,43 +1,55 @@
-## Titanic Survival Prediction
+## Titanic Survival Prediction (v2)
 
 ### Overview
+Predict whether a Titanic passenger survived from ticket class, sex, age, family aboard and fare, using Kaggle's labelled training data (891 passengers).
 
-The Titanic dataset is a well-known and educational machine learning problem, particularly suitable for beginners. It revolves around the passengers aboard the ill-fated Titanic in 1912. The dataset provides various attributes for each passenger, including age, sex, cabin, class, and more. The primary objective of this task is to predict whether a passenger survived the tragic sinking of the Titanic.
+### Why there is a v2: auditing my own model
+My first version reported **98.8% test accuracy**. When I audited it, that figure turned out to be an artefact, not a result:
 
-### Data Exploration
+- **Label leakage.** It was trained and tested on `tested.csv`, a copy of Kaggle's *test* set. Its `Survived` column comes from Kaggle's `gender_submission.csv`, a sample answer in which every woman survives and every man does not. The model simply learned *sex = survival*. The tell: 36.4% of the file is marked as survived, exactly the share of women in it (152 of 418).
+- **Preprocessing fitted on test data.** `fit_transform` was called on the test set, so the scaler learned from data the model should never see.
+- **An ID used as a feature.** `PassengerId` is a row number, not passenger information.
 
-I embarked on this project by conducting a thorough exploration of the dataset. Key aspects of this exploration included:
+### Approach
+- **Held-out test set first:** a stratified 80/20 split made before any exploration (712 train / 179 test).
+- **Feature engineering:**
+  - **Title:** extracted from the passenger's name.
+  - **FamilySize** and **IsAlone:** derived from the siblings/spouses and parents/children columns.
+  - **HasCabin:** whether a cabin is recorded.
+- **Single scikit-learn pipeline:** median imputation, scaling and one-hot encoding are all fitted inside it, so every cross-validation fold is clean.
+- **Baselines:**
+  - **Majority class** (everyone died): 61.7%.
+  - **"Women survive" rule:** 78.9% on train, 77.7% on test.
+- **Model comparison (5-fold stratified CV):** logistic regression, RBF SVM, random forest and gradient boosting.
+- **Tuning:** a grid search on the two strongest models.
 
-- **Descriptive Statistics:** To understand the dataset's essential characteristics and gain insights into passenger demographics.
-- **Data Visualization:** Creating histograms and visual representations of the data attributes to comprehend attribute distributions and patterns.
+### Results
 
-This initial analysis allowed me to grasp the nature of the task at hand, which is a classic binary classification problem.
+| Model | Train accuracy | CV accuracy | CV ROC-AUC |
+|---|---|---|---|
+| SVM (RBF) | 0.853 | 0.831 | 0.867 |
+| Logistic regression | 0.836 | 0.830 | 0.872 |
+| Gradient boosting | 0.924 | 0.824 | 0.895 |
+| Random forest | 0.986 | 0.823 | 0.876 |
 
-### Data Preprocessing
+The random forest's 0.986 training accuracy against 0.823 in cross-validation is a clear sign of overfitting. Models were judged on cross-validated scores only.
 
-Preparing the data for machine learning involved several critical steps:
+**Final model:** a tuned SVM (C=3, gamma=0.03), scored once on the untouched test set:
 
-- **Handling Missing Values:** Given the significant number of missing values in the "Cabin" attribute, I decided to remove it entirely. For other attributes with missing values, I filled them in with median attribute values to maintain data integrity.
-- **Feature Scaling:** I utilized Scikit-Learn's StandardScaler for feature scaling to ensure all attributes contributed equally to model training.
-- **Encoding Categorical Features:** Employing OneHotEncoder, I transformed categorical features into a suitable format for machine learning.
+| Accuracy | Precision | Recall | F1 | ROC-AUC |
+|---|---|---|---|---|
+| **84.4%** | 82.5% | 75.4% | 78.8% | 0.849 |
 
-### Model Training and Evaluation
+That's 6.7 points better than the "women survive" baseline on the same passengers.
 
-I opted to train a Support Vector Machine (SVM) classifier on the preprocessed data. The choice was made due to its capacity for handling both linear and non-linear classification tasks.
+### Error analysis
+28 of 179 test passengers were misclassified. Most errors are passengers the "women and children first" pattern doesn't explain: men who survived (17) and third-class women who didn't (9).
 
-- **Performance Metric:** I evaluated the model's performance using accuracy as the primary metric. The objective was to determine how effectively the model predicts passenger survival.
+### Lessons
+1. Check where the labels come from.
+2. Split off the test set before exploring or preprocessing.
+3. Keep every transformation inside a pipeline.
+4. Always compare against a simple baseline.
+5. Treat an unusually high score as a bug until proven otherwise.
 
-### Model Evaluation
-
-To assess the model's predictive capabilities, I conducted a thorough evaluation process, which included:
-
-- **Cross-Validation:** Employing cross-validation techniques on the training set to ensure robustness and minimize overfitting.
-- **Test Set Evaluation:** Evaluating the model on a separate test dataset to validate its performance on unseen data.
-
-The results were highly satisfying, with the Support Vector Classifier achieving an impressive accuracy rate of .. percent. This demonstrated the model's proficiency in distinguishing survivors from non-survivors among Titanic passengers.
-
-### Conclusion
-
-This Titanic Survival Prediction project marked a significant milestone for me as it was my first solo project without the guidance of an online course instructor or book. It showcases the power of machine learning in tackling real-world classification challenges. The high accuracy achieved by the Support Vector Classifier underscores the model's effectiveness in predicting passenger survival on the Titanic. This project serves as an excellent starting point for those new to machine learning.
-
-- **Project source:** Kaggle
+- **Data:** Kaggle *Titanic: Machine Learning from Disaster*, `train.csv`
